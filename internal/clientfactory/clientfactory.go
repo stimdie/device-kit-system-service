@@ -43,7 +43,7 @@ func createConnection(address string) *grpc.ClientConn {
 	if err != nil {
 		log.Printf("Could not connect to: %v", err)
 	} else {
-		log.Printf("connected to " + address)
+		log.Printf("connected to %s", address)
 	}
 	return conn
 }

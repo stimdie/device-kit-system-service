@@ -8,8 +8,10 @@ package utils
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"os/exec"
+	"strings"
 
 	"github.com/shirou/gopsutil/v3/disk"
 	syscall "golang.org/x/sys/unix"
@@ -32,6 +34,14 @@ const (
 	ssdDisk = "SSD"
 	// hddDisk is hdd disk type
 	hddDisk = "HDD"
+	// emmcDisk is emmc disk type
+	emmcDisk = "eMMC"
+	// defaultDisk is when disk is outside of type ssd,hdd/eMMC
+	defaultDisk = "-"
+	// emmcPrefix is prefix of emmc device name
+	emmcPrefix = "mmc"
+	// sdPrefix is prefix of sd device name
+	sdPrefix = "sd"
 )
 
 // DiskStatus struct for Status Infos
@@ -67,7 +77,7 @@ func DiskUsage(path string) (disk DiskStatus, err error) {
 	disk.Avail = fs.Bavail * uint64(fs.Bsize)
 	disk.Free = fs.Bfree * uint64(fs.Bsize)
 	disk.Used = disk.All - disk.Free
-	diskType, diskName, err := getDiskInfo()
+	diskType, diskName, err := diskCommander()
 	if err != nil {
 		log.Printf("Utils:DiskUsage(), Failed to get disk info: %v", err)
 		disk.DiskType = ""
@@ -86,10 +96,8 @@ func DiskUsage(path string) (disk DiskStatus, err error) {
 	return
 }
 
-// getDiskInfo() return the type of the disk as ssd/hdd
-func getDiskInfo() (string, string, error) {
-	var diskType, diskName string
-
+// diskCommander() returns the disk type and name based on the block device of the system.
+func diskCommander() (string, string, error) {
 	// It is possible that it might return an empty string
 	// If it not supported by the OS and the scenario is already handled from edge-core
 	output, err := exec.Command(shell, "-c", storageDiskTypeCommand).Output()
@@ -104,16 +112,45 @@ func getDiskInfo() (string, string, error) {
 		return "", "", err
 	}
 
+	diskType, diskName, err := getDiskInfo(lsblkOutput)
+	if err != nil {
+		log.Printf("Utils:getDiskType(), Failed to get disk info: %v", err)
+		return "", "", err
+	}
+
+	return diskType, diskName, nil
+}
+
+// getDiskInfo return the type of the disk as ssd/hdd/emmc
+func getDiskInfo(lsblkOutput StorageDiskTypeOutput) (string, string, error) {
+	var diskType, diskName string
+
+	if lsblkOutput.BlockDevices == nil {
+		log.Printf("Utils:getDiskInfo(), No block devices found")
+		return "", "", errors.New("Utils:getDiskInfo(), No block devices found")
+	}
+
 	for _, device := range lsblkOutput.BlockDevices {
 		if device.Type == blockType && !device.Removable {
-			diskType = ssdDisk
 			if device.Rotational {
 				diskType = hddDisk
+			} else {
+				diskType = identifyNonRotationalDiskType(device.Name)
 			}
 			diskName = device.Name
 		}
 	}
 	return diskType, diskName, nil
+}
+
+// identifyNonRotationalDiskType() returns the disk type based on the device name
+func identifyNonRotationalDiskType(deviceName string) string {
+	if strings.HasPrefix(deviceName, emmcPrefix) {
+		return emmcDisk
+	} else if strings.HasPrefix(deviceName, sdPrefix) {
+		return ssdDisk
+	}
+	return defaultDisk
 }
 
 // getDiskSpeed() returns the read/write sectors in bytes
