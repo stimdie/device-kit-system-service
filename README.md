@@ -1,3 +1,5 @@
+*This project is partially funded by the Federal Ministry for Economic Affairs and Energy based on a decision by the German Bundestag | Your funding provider: Kicks for Edge as part of the EU funding program IPCEI-CIS (FKZ:13IPC008)*
+
 # Introduction
 
 The IE Device Kit API provides the abstraction layer that decouples the Industrial Edge Runtime from the underlying Linux systems. This allows to adapt the runtime and its behavior to serve for the specific needs of different Industrial Edge products. 
